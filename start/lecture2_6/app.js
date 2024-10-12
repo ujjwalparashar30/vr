@@ -1,101 +1,100 @@
-import * as THREE from '../../libs/three/three.module.js';
-import { GLTFLoader } from '../../libs/three/jsm/GLTFLoader.js';
-import { FBXLoader } from '../../libs/three/jsm/FBXLoader.js';
-import { RGBELoader } from '../../libs/three/jsm/RGBELoader.js';
-import { OrbitControls } from '../../libs/three/jsm/OrbitControls.js';
-import { LoadingBar } from '../../libs/LoadingBar.js';
-import { vector3ToString } from '../../libs/DebugUtils.js';
+import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
+import { VRButton } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/webxr/VRButton.js';
 
-class App{
-	constructor(){
-		const container = document.createElement( 'div' );
-		document.body.appendChild( container );
-        
-		this.camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100 );
-		this.camera.position.set( 0, 4, 14 );
-        
-		this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color( 0xaaaaaa );
+// Scene setup
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 1.6, 3);
 
-		const ambient = new THREE.HemisphereLight(0xffffff, 0x666666, 0.3);
-		this.scene.add(ambient);
-        
-        const light = new THREE.DirectionalLight();
-        light.position.set( 0.2, 1, 1.5);
-        this.scene.add(light);
-			
-		this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true } );
-		this.renderer.setPixelRatio( window.devicePixelRatio );
-		this.renderer.setSize( window.innerWidth, window.innerHeight );
-        this.renderer.outputEncoding = THREE.sRGBEncoding;
-        this.renderer.physicallyCorrectLights = true;
-        this.setEnvironment();
-		container.appendChild( this.renderer.domElement );
-		
-        this.LoadingBar = new LoadingBar();
-        this.loadGLTF();
-        //Add code here
-        
-        
-        this.controls = new OrbitControls( this.camera, this.renderer.domElement );
-        this.controls.target.set(0, 3.5, 0);
-        this.controls.update();
-        
-        window.addEventListener('resize', this.resize.bind(this) );
-	}	
-    
-    setEnvironment(){
-        const loader = new RGBELoader().setDataType( THREE.UnsignedByteType );
-        const pmremGenerator = new THREE.PMREMGenerator( this.renderer );
-        pmremGenerator.compileEquirectangularShader();
-        
-        const self = this;
-        
-        loader.load( '../../assets/hdr/venice_sunset_1k.hdr', ( texture ) => {
-          const envMap = pmremGenerator.fromEquirectangular( texture ).texture;
-          pmremGenerator.dispose();
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+document.body.appendChild(VRButton.createButton(renderer));
 
-          self.scene.environment = envMap;
+// Lighting
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(1, 1, 1);
+scene.add(light);
 
-        }, undefined, (err)=>{
-            console.error( 'An error occurred setting the environment');
-        } );
+// Materials
+const redMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+const blueMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+const greenMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+
+// Create test tubes
+const geometry = new THREE.CylinderGeometry(0.1, 0.1, 0.5, 32);
+const testTube1 = new THREE.Mesh(geometry, redMaterial);
+const testTube2 = new THREE.Mesh(geometry, blueMaterial);
+
+testTube1.position.set(-0.5, 1.2, -1);
+testTube2.position.set(0.5, 1.2, -1);
+
+scene.add(testTube1);
+scene.add(testTube2);
+
+// Variables to track mixing
+let isMixing = false;
+let mixed = false;
+
+// Gamepad input handling
+function handleGamepadInput() {
+    const gamepads = navigator.getGamepads();
+    if (gamepads[0]) {
+        const gp = gamepads[0];
+
+        // 'A' button to start mixing
+        if (gp.buttons[0].pressed && !isMixing) {
+            console.log('Mixing chemicals...');
+            startMixing();
+        }
+
+        // 'B' button to reset
+        if (gp.buttons[1].pressed && mixed) {
+            console.log('Resetting...');
+            resetMix();
+        }
     }
-    
-    loadGLTF(){
-        const self = this;
-        const loader = new GLTFLoader().setPath('../../assets/')
-        loader.load('office-chair.glb', 
-            (gltf) => {
-            self.chair = gltf.scene;
-            const bbox = new THREE.Box3().setFromObject( gltf.scene );
-            console.log(`min:${bbox.min.x.toFixed(2)},${bbox.min.y.toFixed(2)},${bbox.min.z.toFixed(2)} -  max:${bbox.max.x.toFixed(2)},${bbox.max.y.toFixed(2)},${bbox.max.z.toFixed(2)}`);
-            self.scene.add(gltf.scene);
-            self.LoadingBar.visible = false;
-            self.renderer.setAnimationLoop(self.render.bind(self));
-        },
-        function(xhr){
-            self.LoadingBar.progress = xhr.loaded/xhr.total;
-        },
-        function(error){
-            console.error( 'An error occurred loading the GLTF');
-            }
-    )
-    }
-    
-    loadFBX(){
-    }
-    
-    resize(){
-        this.camera.aspect = window.innerWidth / window.innerHeight;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize( window.innerWidth, window.innerHeight );  
-    }
-    
-	render( ) {   
-        this.chair.rotateY( 0.01 );
-        this.renderer.render( this.scene, this.camera );
-    }
+
+    requestAnimationFrame(handleGamepadInput);
 }
 
-export { App };
+// Start mixing function
+function startMixing() {
+    isMixing = true;
+    setTimeout(() => {
+        // Change the color to green after mixing
+        testTube1.material = greenMaterial;
+        testTube2.material = greenMaterial;
+        mixed = true;
+        isMixing = false;
+        console.log('Chemicals mixed: Red + Blue = Green');
+    }, 2000); // 2-second delay to simulate mixing process
+}
+
+// Reset the test tubes
+function resetMix() {
+    testTube1.material = redMaterial;
+    testTube2.material = blueMaterial;
+    mixed = false;
+}
+
+// Handle window resize
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Animate function
+function animate() {
+    renderer.setAnimationLoop(() => {
+        renderer.render(scene, camera);
+    });
+}
+
+// Start checking for gamepad input
+handleGamepadInput();
+
+// Start animation
+animate();
