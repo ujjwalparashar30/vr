@@ -1,15 +1,121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Lab - Mix Chemicals</title>
-    <style>
-        body { margin: 0; }
-        canvas { display: block; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eye-Tracking Test with Gamepad</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 </head>
 <body>
-    <script type="module" src="app.js"></script>
+  <h1>Eye-Tracking Model Test</h1>
+  <p>Press the "A" button on your gamepad to start focusing based on eye tracking!</p>
+  <video id="input_video" width="640" height="480" autoplay></video>
+  <canvas id="output_canvas" width="640" height="480"></canvas>
+
+  <script>
+    // Initialize the video and canvas elements
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    // Gamepad detection variables
+    let gamepad = null;
+    
+    // Detect when gamepad is connected
+    window.addEventListener("gamepadconnected", (event) => {
+      gamepad = event.gamepad;
+      console.log("Gamepad connected:", gamepad);
+      pollGamepad();  // Start polling gamepad inputs
+    });
+
+    // Detect when gamepad is disconnected
+    window.addEventListener("gamepaddisconnected", () => {
+      gamepad = null;
+      console.log("Gamepad disconnected");
+    });
+
+    // Function to handle gamepad inputs
+    function pollGamepad() {
+      if (!gamepad) return;
+      const gp = navigator.getGamepads()[gamepad.index];
+
+      // Example: "A" button (button 0) triggers focus based on eye tracking
+      if (gp.buttons[0].pressed) {
+        focusOnTarget();  // Trigger eye-tracking-based focus
+      }
+
+      // Continue polling every frame
+      requestAnimationFrame(pollGamepad);
+    }
+
+    // Eye-tracking model initialization (Holistic and FaceMesh)
+    const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
+    const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+
+    holistic.setOptions({
+      upperBodyOnly: true,
+      smoothLandmarks: true,
+      enableSegmentation: true,
+      smoothSegmentation: true,
+      refineFaceLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+
+    faceMesh.setOptions({
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+
+    // Start video stream and processing
+    async function startVideo() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      videoElement.srcObject = stream;
+      videoElement.play();
+    }
+
+    // Function to process results from the eye-tracking models
+    function onResults(results) {
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      // Draw landmarks (for visualization)
+      if (results.multiFaceLandmarks) {
+        for (const landmarks of results.multiFaceLandmarks) {
+          drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C070', lineWidth: 1});
+          drawLandmarks(canvasCtx, landmarks, {color: '#FF3030', lineWidth: 2});
+        }
+      }
+    }
+
+    holistic.onResults(onResults);
+    faceMesh.onResults(onResults);
+
+    // Initialize camera feed for processing
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await holistic.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480,
+    });
+    camera.start();
+
+    // Gamepad-triggered eye-tracking focus function
+    function focusOnTarget() {
+      console.log("Focusing on target based on eye tracking...");
+      // Simulated action when eye-tracking detects focus
+      canvasCtx.fillStyle = 'red';
+      canvasCtx.font = '20px Arial';
+      canvasCtx.fillText("Focus Detected!", 300, 50);
+    }
+
+    // Start video stream
+    startVideo();
+  </script>
 </body>
 </html>
