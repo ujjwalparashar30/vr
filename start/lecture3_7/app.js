@@ -4,7 +4,6 @@ import { XRControllerModelFactory } from '../../libs/three/jsm/XRControllerModel
 import { Stats } from '../../libs/stats.module.js';
 import { OrbitControls } from '../../libs/three/jsm/OrbitControls.js';
 
-
 class App{
 	constructor(){
 		const container = document.createElement( 'div' );
@@ -36,7 +35,6 @@ class App{
         this.controls.update();
         
         this.stats = new Stats();
-        document.body.appendChild( this.stats.dom );
         
         this.raycaster = new THREE.Raycaster();
         this.workingMatrix = new THREE.Matrix4();
@@ -44,7 +42,7 @@ class App{
         this.origin = new THREE.Vector3();
         
         this.initScene();
-        this.setupXR();
+        this.setupVR();
         
         window.addEventListener('resize', this.resize.bind(this) );
         
@@ -90,10 +88,9 @@ class App{
             }
         }
         
-        
     } 
     
-    setupXR(){
+    setupVR(){
         this.renderer.xr.enabled = true;
         
         const button = new VRButton( this.renderer );
@@ -101,18 +98,14 @@ class App{
         const self = this;
         
         function onSelectStart() {
-            
             this.userData.selectPressed = true;
         }
 
         function onSelectEnd() {
-
             this.userData.selectPressed = false;
-            
         }
         
         this.controller = this.renderer.xr.getController( 0 );
-        this.dolly.add( this.controller );
         this.controller.addEventListener( 'selectstart', onSelectStart );
         this.controller.addEventListener( 'selectend', onSelectEnd );
         this.controller.addEventListener( 'connected', function ( event ) {
@@ -123,11 +116,9 @@ class App{
 
         } );
         this.controller.addEventListener( 'disconnected', function () {
-
             this.remove( this.children[ 0 ] );
             self.controller = null;
             self.controllerGrip = null;
-
         } );
         this.scene.add( this.controller );
 
@@ -136,6 +127,14 @@ class App{
         this.controllerGrip = this.renderer.xr.getControllerGrip( 0 );
         this.controllerGrip.add( controllerModelFactory.createControllerModel( this.controllerGrip ) );
         this.scene.add( this.controllerGrip );
+        
+        this.dolly = new THREE.Object3D();
+        this.dolly.position.z = 5;
+        this.dolly.add( this.camera );
+        this.scene.add( this.dolly );
+        
+        this.dummyCam = new THREE.Object3D();
+        this.camera.add( this.dummyCam );
 
     }
     
@@ -145,31 +144,42 @@ class App{
         switch ( data.targetRayMode ) {
             
             case 'tracked-pointer':
-
                 geometry = new THREE.BufferGeometry();
                 geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ 0, 0, 0, 0, 0, - 1 ], 3 ) );
                 geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( [ 0.5, 0.5, 0.5, 0, 0, 0 ], 3 ) );
-
                 material = new THREE.LineBasicMaterial( { vertexColors: true, blending: THREE.AdditiveBlending } );
-
                 return new THREE.Line( geometry, material );
 
             case 'gaze':
-
                 geometry = new THREE.RingBufferGeometry( 0.02, 0.04, 32 ).translate( 0, 0, - 1 );
                 material = new THREE.MeshBasicMaterial( { opacity: 0.5, transparent: true } );
                 return new THREE.Mesh( geometry, material );
-
         }
 
     }
     
     handleController( controller, dt ){
-        if (controller.userData.selectPressed ){
+        const gamepads = navigator.getGamepads();
+        if (gamepads[0]) {
+            const gamepad = gamepads[0];
+
+            const xAxis = gamepad.axes[2];  // Joystick X-axis
+            const yAxis = gamepad.axes[3];  // Joystick Y-axis
             
+            const speed = 3;  // Adjust speed as necessary
+            
+            // Move forward/backward based on joystick Y-axis
+            if (Math.abs(yAxis) > 0.1) {
+                this.dolly.translateZ(-yAxis * dt * speed);
+            }
+            
+            // Move left/right based on joystick X-axis
+            if (Math.abs(xAxis) > 0.1) {
+                this.dolly.translateX(xAxis * dt * speed);
+            }
         }
     }
-    
+
     resize(){
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
@@ -179,7 +189,7 @@ class App{
 	render( ) {  
         const dt = this.clock.getDelta();
         this.stats.update();
-        if (this.controller ) this.handleController( this.controller, dt );
+        if (this.controller) this.handleController( this.controller, dt );
         this.renderer.render( this.scene, this.camera );
     }
 }
